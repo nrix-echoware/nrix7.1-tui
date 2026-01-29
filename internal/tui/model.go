@@ -123,7 +123,8 @@ func (m *Model) GoToScreen(screen types.Screen) tea.Cmd {
 	m.screen = screen
 	m.ResetCursor()
 	m.viewport.GotoTop()
-	return tea.ClearScreen
+	m.viewport.SetContent("")
+	return tea.Sequence(tea.ClearScreen, tea.WindowSize())
 }
 
 func (m *Model) SetNotification(message, notifType string) tea.Cmd {

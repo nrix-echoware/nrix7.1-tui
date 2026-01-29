@@ -9,7 +9,7 @@ import (
 
 func (m *Model) Init() tea.Cmd {
 	loadingCmd := m.SetLoading(true, "Loading products...")
-	return tea.Batch(loadingCmd, loadProductsCmd(m.apiClient, 0, 20))
+	return tea.Batch(tea.ClearScreen, loadingCmd, loadProductsCmd(m.apiClient, 0, 20))
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -89,7 +89,9 @@ func (m *Model) handleProductsLoaded(msg productsLoadedMsg) (tea.Model, tea.Cmd)
 	}
 	m.homeProducts = msg.products
 	m.ClearError()
-	return m, tea.ClearScreen
+	m.viewport.GotoTop()
+	m.viewport.SetContent("")
+	return m, tea.Sequence(tea.ClearScreen, tea.WindowSize())
 }
 
 func (m *Model) handleProductLoaded(msg productLoadedMsg) (tea.Model, tea.Cmd) {
@@ -103,7 +105,9 @@ func (m *Model) handleProductLoaded(msg productLoadedMsg) (tea.Model, tea.Cmd) {
 	m.InitVariantSelections()
 	m.screen = types.ScreenProduct
 	m.ClearError()
-	return m, tea.ClearScreen
+	m.viewport.GotoTop()
+	m.viewport.SetContent("")
+	return m, tea.Sequence(tea.ClearScreen, tea.WindowSize())
 }
 
 func (m *Model) handleSearchResults(msg searchResultsMsg) (tea.Model, tea.Cmd) {
@@ -115,7 +119,9 @@ func (m *Model) handleSearchResults(msg searchResultsMsg) (tea.Model, tea.Cmd) {
 	m.searchResults = msg.products
 	m.ResetCursor()
 	m.ClearError()
-	return m, tea.ClearScreen
+	m.viewport.GotoTop()
+	m.viewport.SetContent("")
+	return m, tea.Sequence(tea.ClearScreen, tea.WindowSize())
 }
 
 func (m *Model) handleOrderCreated(msg orderCreatedMsg) (tea.Model, tea.Cmd) {
@@ -127,7 +133,9 @@ func (m *Model) handleOrderCreated(msg orderCreatedMsg) (tea.Model, tea.Cmd) {
 	m.order = msg.order
 	m.screen = types.ScreenOrderSuccess
 	m.ClearError()
-	return m, tea.ClearScreen
+	m.viewport.GotoTop()
+	m.viewport.SetContent("")
+	return m, tea.Sequence(tea.ClearScreen, tea.WindowSize())
 }
 
 func (m *Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -242,7 +250,8 @@ func (m *Model) handleProductKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.ResetProductState()
 		m.ResetCursor()
 		m.viewport.GotoTop()
-		return m, tea.ClearScreen
+		m.viewport.SetContent("")
+		return m, tea.Sequence(tea.ClearScreen, tea.WindowSize())
 	case "a":
 		return m.addToCart()
 	case "enter":
@@ -342,11 +351,15 @@ func (m *Model) handleAddressKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.screen = types.ScreenCart
-		return m, tea.ClearScreen
+		m.viewport.GotoTop()
+		m.viewport.SetContent("")
+		return m, tea.Sequence(tea.ClearScreen, tea.WindowSize())
 	case "enter":
 		if m.address.Phone != "" && m.address.Email != "" && m.address.Address != "" {
 			m.screen = types.ScreenCheckout
-			return m, tea.ClearScreen
+			m.viewport.GotoTop()
+			m.viewport.SetContent("")
+			return m, tea.Sequence(tea.ClearScreen, tea.WindowSize())
 		}
 		return m, nil
 	case "tab", "down":
@@ -398,12 +411,16 @@ func (m *Model) handleCheckoutKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc", "b":
 		m.screen = types.ScreenAddress
-		return m, tea.ClearScreen
+		m.viewport.GotoTop()
+		m.viewport.SetContent("")
+		return m, tea.Sequence(tea.ClearScreen, tea.WindowSize())
 	case "enter", "y":
 		return m.placeOrder()
 	case "n":
 		m.screen = types.ScreenAddress
-		return m, tea.ClearScreen
+		m.viewport.GotoTop()
+		m.viewport.SetContent("")
+		return m, tea.Sequence(tea.ClearScreen, tea.WindowSize())
 	}
 	return m, nil
 }

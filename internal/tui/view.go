@@ -111,7 +111,10 @@ func (m *Model) View() string {
 	b.WriteString("\n")
 	b.WriteString(footer)
 
-	return b.String()
+	return lipgloss.NewStyle().
+		Width(m.width).
+		Height(m.height).
+		Render(b.String())
 }
 
 func (m *Model) renderLoading() string {
@@ -119,9 +122,7 @@ func (m *Model) renderLoading() string {
 
 	var b strings.Builder
 	b.WriteString("\n")
-	b.WriteString(TitleStyle.Render(AsciiLogo))
-	b.WriteString("\n\n")
-	b.WriteString(SubtitleStyle.Render("Buying made minimal."))
+	b.WriteString(TitleStyle.Render(cfg.ShopName))
 	b.WriteString("\n\n")
 
 	// About Us
@@ -151,10 +152,11 @@ func (m *Model) renderLoading() string {
 
 func (m *Model) renderHome(w int) (header, content, footer string) {
 	// HEADER
+	cfg := config.GetConfig()
 	var h strings.Builder
 	h.WriteString(m.divider(w))
 	h.WriteString("\n")
-	leftPart := TitleStyle.Render("TERMINAL.SHOP")
+	leftPart := TitleStyle.Render(cfg.ShopName)
 	rightPart := ""
 	if m.cart.Count() > 0 {
 		rightPart = CartBadgeStyle.Render(fmt.Sprintf(" Cart(%d) ", m.cart.Count()))
