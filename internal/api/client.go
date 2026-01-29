@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 	"terminal-echoware/pkg/types"
 )
@@ -30,12 +31,15 @@ func appendOrderLog(entry string) {
 
 func NewClient(baseURL string) *Client {
 	return &Client{
-		BaseURL:    baseURL,
+		BaseURL:    normalizeBaseURL(baseURL),
 		HTTPClient: &http.Client{},
 	}
 }
 
 func (c *Client) CallAPI(req types.APIRequest) (*types.APIResponse, error) {
+	if c.BaseURL == "" {
+		return nil, fmt.Errorf("missing api base url")
+	}
 	jsonData, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("marshal request: %w", err)
@@ -78,6 +82,17 @@ func (c *Client) CallAPI(req types.APIRequest) (*types.APIResponse, error) {
 	}
 
 	return &apiResp, nil
+}
+
+func normalizeBaseURL(baseURL string) string {
+	baseURL = strings.TrimSpace(baseURL)
+	if baseURL == "" {
+		return ""
+	}
+	if strings.HasPrefix(baseURL, "http://") || strings.HasPrefix(baseURL, "https://") {
+		return baseURL
+	}
+	return "http://" + baseURL
 }
 
 func (c *Client) ListProducts(params types.ProductListParams) ([]types.Product, int, error) {

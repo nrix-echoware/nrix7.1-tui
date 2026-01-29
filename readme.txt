@@ -12,3 +12,13 @@
 > https://souravahmed.vercel.app [dev and maintainer of nrix | echoware]
 
 > https://nrix-echoware-business.vercel.app, visit nrix for more details
+
+
+### setup server 
+```bash
+sudo mkdir -p /opt/terminal-shop
+sudo ssh-keygen \
+  -t ed25519 \
+  -f .ssh_host_ed25519_key \
+  -N ""
+```
