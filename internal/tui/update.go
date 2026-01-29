@@ -241,21 +241,30 @@ func (m *Model) handleProductKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.currentProduct = nil
 		m.ResetProductState()
 		m.ResetCursor()
+		m.viewport.GotoTop()
 		return m, tea.ClearScreen
 	case "a":
 		return m.addToCart()
 	case "enter":
 		return m.addToCart()
-	case "tab", "down", "j":
+	case "tab":
 		m.MoveFocusDown()
 		return m, nil
-	case "shift+tab", "up", "k":
+	case "shift+tab":
 		m.MoveFocusUp()
 		return m, nil
-	case "left", "h", "-", "_":
+	case "up", "k":
+		// Scroll viewport up
+		m.viewport.LineUp(1)
+		return m, nil
+	case "down", "j":
+		// Scroll viewport down
+		m.viewport.LineDown(1)
+		return m, nil
+	case "left", "h":
 		m.CycleVariantLeft()
 		return m, nil
-	case "right", "l", "+", "=":
+	case "right", "l":
 		m.CycleVariantRight()
 		return m, nil
 	case "c":
