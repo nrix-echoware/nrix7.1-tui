@@ -2,6 +2,8 @@ package tui
 
 import (
 	"fmt"
+	"strings"
+	"time"
 	"terminal-echoware/pkg/types"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -290,11 +292,11 @@ func (m *Model) addToCart() (tea.Model, tea.Cmd) {
 	// Check if all variants are selected (for products with variants)
 	if len(m.currentProduct.ProductVariants) > 0 {
 		variantStr := m.GetSelectedVariantString()
-		m.cart.Add(*m.currentProduct, m.productQuantity)
+		m.cart.Add(*m.currentProduct, m.productQuantity, m.GetSelectedVariants())
 		return m, m.SetNotification(fmt.Sprintf("Added %d (%s) to cart!", m.productQuantity, variantStr), "success")
 	}
 	
-	m.cart.Add(*m.currentProduct, m.productQuantity)
+	m.cart.Add(*m.currentProduct, m.productQuantity, nil)
 	return m, m.SetNotification(fmt.Sprintf("Added %d to cart!", m.productQuantity), "success")
 }
 
@@ -331,7 +333,7 @@ func (m *Model) handleCartKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "d", "x":
 		if m.cursor < len(m.cart.Items) {
 			name := m.cart.Items[m.cursor].Product.Name
-			m.cart.Remove(m.cart.Items[m.cursor].Product.ID)
+			m.cart.Remove(m.cart.Items[m.cursor].Product.ID, m.cart.Items[m.cursor].Variant)
 			if m.cursor >= len(m.cart.Items) && m.cursor > 0 {
 				m.cursor--
 			}
@@ -355,18 +357,18 @@ func (m *Model) handleAddressKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.viewport.SetContent("")
 		return m, tea.Sequence(tea.ClearScreen, tea.WindowSize())
 	case "enter":
-		if m.address.Phone != "" && m.address.Email != "" && m.address.Address != "" {
-			m.screen = types.ScreenCheckout
-			m.viewport.GotoTop()
-			m.viewport.SetContent("")
-			return m, tea.Sequence(tea.ClearScreen, tea.WindowSize())
+		if errMsg := m.validateShippingDetails(); errMsg != "" {
+			return m, m.SetNotification(errMsg, "error")
 		}
-		return m, nil
+		m.screen = types.ScreenCheckout
+		m.viewport.GotoTop()
+		m.viewport.SetContent("")
+		return m, tea.Sequence(tea.ClearScreen, tea.WindowSize())
 	case "tab", "down":
-		m.cursor = (m.cursor + 1) % 3
+		m.cursor = (m.cursor + 1) % 9
 		return m, nil
 	case "up":
-		m.cursor = (m.cursor + 2) % 3
+		m.cursor = (m.cursor + 8) % 9
 		return m, nil
 	case "backspace":
 		m.handleAddressBackspace()
@@ -382,16 +384,40 @@ func (m *Model) handleAddressKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *Model) handleAddressBackspace() {
 	switch m.cursor {
 	case 0:
+		if len(m.address.FullName) > 0 {
+			m.address.FullName = m.address.FullName[:len(m.address.FullName)-1]
+		}
+	case 1:
 		if len(m.address.Phone) > 0 {
 			m.address.Phone = m.address.Phone[:len(m.address.Phone)-1]
 		}
-	case 1:
+	case 2:
 		if len(m.address.Email) > 0 {
 			m.address.Email = m.address.Email[:len(m.address.Email)-1]
 		}
-	case 2:
-		if len(m.address.Address) > 0 {
-			m.address.Address = m.address.Address[:len(m.address.Address)-1]
+	case 3:
+		if len(m.address.AddressLine1) > 0 {
+			m.address.AddressLine1 = m.address.AddressLine1[:len(m.address.AddressLine1)-1]
+		}
+	case 4:
+		if len(m.address.AddressLine2) > 0 {
+			m.address.AddressLine2 = m.address.AddressLine2[:len(m.address.AddressLine2)-1]
+		}
+	case 5:
+		if len(m.address.City) > 0 {
+			m.address.City = m.address.City[:len(m.address.City)-1]
+		}
+	case 6:
+		if len(m.address.State) > 0 {
+			m.address.State = m.address.State[:len(m.address.State)-1]
+		}
+	case 7:
+		if len(m.address.PostalCode) > 0 {
+			m.address.PostalCode = m.address.PostalCode[:len(m.address.PostalCode)-1]
+		}
+	case 8:
+		if len(m.address.Country) > 0 {
+			m.address.Country = m.address.Country[:len(m.address.Country)-1]
 		}
 	}
 }
@@ -399,11 +425,23 @@ func (m *Model) handleAddressBackspace() {
 func (m *Model) handleAddressInput(input string) {
 	switch m.cursor {
 	case 0:
-		m.address.Phone += input
+		m.address.FullName += input
 	case 1:
-		m.address.Email += input
+		m.address.Phone += input
 	case 2:
-		m.address.Address += input
+		m.address.Email += input
+	case 3:
+		m.address.AddressLine1 += input
+	case 4:
+		m.address.AddressLine2 += input
+	case 5:
+		m.address.City += input
+	case 6:
+		m.address.State += input
+	case 7:
+		m.address.PostalCode += input
+	case 8:
+		m.address.Country += input
 	}
 }
 
@@ -415,6 +453,9 @@ func (m *Model) handleCheckoutKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.viewport.SetContent("")
 		return m, tea.Sequence(tea.ClearScreen, tea.WindowSize())
 	case "enter", "y":
+		if errMsg := m.validateShippingDetails(); errMsg != "" {
+			return m, m.SetNotification(errMsg, "error")
+		}
 		return m.placeOrder()
 	case "n":
 		m.screen = types.ScreenAddress
@@ -426,23 +467,99 @@ func (m *Model) handleCheckoutKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) placeOrder() (tea.Model, tea.Cmd) {
-	var orderItems []types.OrderItem
+	var orderItems []types.OrderItemInput
 	for _, item := range m.cart.Items {
-		orderItems = append(orderItems, types.OrderItem{
-			Product:  item.Product,
-			Quantity: item.Quantity,
+		total := item.Product.SellingPrice * float64(item.Quantity)
+		orderItems = append(orderItems, types.OrderItemInput{
+			ProductID:   item.Product.ID,
+			ProductName: item.Product.Name,
+			Variant:     item.Variant,
+			Quantity:    item.Quantity,
+			Price:       item.Product.SellingPrice,
+			Total:       total,
 		})
 	}
 
+	subtotal := m.cart.Total()
+	discount := 0.0
+	shipping := 0.0
+	total := subtotal - discount + shipping
+
+	m.address.Address = ""
+	m.address.IsDefault = false
+
 	params := types.OrderCreateParams{
-		TotalAmount:     m.cart.Total(),
-		TotalDiscount:   0,
-		OrderItems:      orderItems,
-		ShippingDetails: m.address,
+		ShippingAddress: m.address,
+		Items:           orderItems,
+		SpecialMessage:  "",
+		Pricing: types.OrderPricingInput{
+			Subtotal: subtotal,
+			Discount: discount,
+			Shipping: shipping,
+			Total:    total,
+		},
+		UserEmail:     m.address.Email,
+		Timestamp:     time.Now().Format(time.RFC3339),
+		PaymentMethod: "cod",
 	}
 
 	loadingCmd := m.SetLoading(true, "Placing order...")
 	return m, tea.Batch(loadingCmd, createOrderCmd(m.apiClient, params))
+}
+
+func (m *Model) validateShippingDetails() string {
+	fullName := strings.TrimSpace(m.address.FullName)
+	phone := strings.TrimSpace(m.address.Phone)
+	email := strings.TrimSpace(m.address.Email)
+	address1 := strings.TrimSpace(m.address.AddressLine1)
+	city := strings.TrimSpace(m.address.City)
+	state := strings.TrimSpace(m.address.State)
+	postal := strings.TrimSpace(m.address.PostalCode)
+	country := strings.TrimSpace(m.address.Country)
+
+	if fullName == "" {
+		return "Full name is required"
+	}
+	if phone == "" || !isValidPhone(phone) {
+		return "Enter a valid phone number"
+	}
+	if email == "" || !isValidEmail(email) {
+		return "Enter a valid email address"
+	}
+	if address1 == "" {
+		return "Address line 1 is required"
+	}
+	if city == "" {
+		return "City is required"
+	}
+	if state == "" {
+		return "State is required"
+	}
+	if postal == "" || len(postal) < 4 {
+		return "Enter a valid postal code"
+	}
+	if country == "" {
+		return "Country is required"
+	}
+	return ""
+}
+
+func isValidEmail(email string) bool {
+	at := strings.Index(email, "@")
+	dot := strings.LastIndex(email, ".")
+	return at > 0 && dot > at+1 && dot < len(email)-1
+}
+
+func isValidPhone(phone string) bool {
+	digits := 0
+	for _, r := range phone {
+		if r >= '0' && r <= '9' {
+			digits++
+		} else if r != '+' && r != '-' && r != ' ' {
+			return false
+		}
+	}
+	return digits >= 8
 }
 
 func (m *Model) handleOrderSuccessKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {

@@ -244,20 +244,21 @@ func (m *Model) renderProduct(w int) (header, content, footer string) {
 	h.WriteString("\n\n")
 
 	// Product title + price (in header)
-	h.WriteString(TitleStyle.Render(p.Name))
+	titleLine := p.Name
 	if p.Brand != "" {
-		h.WriteString(HelpStyle.Render(fmt.Sprintf(" (%s)", p.Brand)))
+		titleLine = fmt.Sprintf("(%s) %s", p.Brand, p.Name)
 	}
+	h.WriteString(TitleStyle.Render("🛍️  " + titleLine))
 	h.WriteString("\n\n")
 
-	// Price line
+	// Price line (single line)
 	priceStr := PriceStyle.Render(fmt.Sprintf("₹%.0f", p.SellingPrice))
 	if p.MRPPrice > p.SellingPrice {
 		discount := ((p.MRPPrice - p.SellingPrice) / p.MRPPrice) * 100
 		priceStr += HelpStyle.Render(fmt.Sprintf("  ₹%.0f", p.MRPPrice))
-		priceStr += SuccessStyle.Render(fmt.Sprintf("  (%.0f%% OFF)", discount))
+		priceStr += SuccessStyle.Render(fmt.Sprintf("  %.0f%% OFF", discount))
 	}
-	h.WriteString(priceStr)
+	h.WriteString("💰 " + priceStr)
 	h.WriteString("\n\n")
 	header = h.String()
 
@@ -267,7 +268,7 @@ func (m *Model) renderProduct(w int) (header, content, footer string) {
 	// Description
 	c.WriteString(m.divider(w))
 	c.WriteString("\n")
-	c.WriteString(SubtitleStyle.Render("DESCRIPTION"))
+	c.WriteString(SubtitleStyle.Render("📝 DESCRIPTION"))
 	c.WriteString("\n")
 	c.WriteString(m.divider(w))
 	c.WriteString("\n\n")
@@ -330,7 +331,7 @@ func (m *Model) renderProduct(w int) (header, content, footer string) {
 	if len(p.Tags) > 0 {
 		c.WriteString(m.divider(w))
 		c.WriteString("\n")
-		c.WriteString(SubtitleStyle.Render("TAGS"))
+		c.WriteString(SubtitleStyle.Render("🏷️ TAGS"))
 		c.WriteString("\n")
 		c.WriteString(m.divider(w))
 		c.WriteString("\n\n")
@@ -389,10 +390,11 @@ func (m *Model) renderCart(w int) (header, content, footer string) {
 
 func (m *Model) renderAddress(w int) (header, content, footer string) {
 	// HEADER
+	cfg := config.GetConfig()
 	var h strings.Builder
 	h.WriteString(m.divider(w))
 	h.WriteString("\n")
-	h.WriteString(m.headerRow("← Back", "SHIPPING DETAILS", w))
+	h.WriteString(m.headerRow("← Back", cfg.ShopName, w))
 	h.WriteString("\n")
 	h.WriteString(m.divider(w))
 	h.WriteString("\n\n")
@@ -400,11 +402,25 @@ func (m *Model) renderAddress(w int) (header, content, footer string) {
 
 	// CONTENT
 	var c strings.Builder
-	c.WriteString(m.renderInputLine("Phone", m.address.Phone, m.cursor == 0, w))
+	c.WriteString(TitleStyle.Render("SHIPPING DETAILS"))
 	c.WriteString("\n\n")
-	c.WriteString(m.renderInputLine("Email", m.address.Email, m.cursor == 1, w))
+	c.WriteString(m.renderInputLine("Full Name", m.address.FullName, m.cursor == 0, w))
 	c.WriteString("\n\n")
-	c.WriteString(m.renderInputLine("Address", m.address.Address, m.cursor == 2, w))
+	c.WriteString(m.renderInputLine("Phone", m.address.Phone, m.cursor == 1, w))
+	c.WriteString("\n\n")
+	c.WriteString(m.renderInputLine("Email", m.address.Email, m.cursor == 2, w))
+	c.WriteString("\n\n")
+	c.WriteString(m.renderInputLine("Address 1", m.address.AddressLine1, m.cursor == 3, w))
+	c.WriteString("\n\n")
+	c.WriteString(m.renderInputLine("Address 2", m.address.AddressLine2, m.cursor == 4, w))
+	c.WriteString("\n\n")
+	c.WriteString(m.renderInputLine("City", m.address.City, m.cursor == 5, w))
+	c.WriteString("\n\n")
+	c.WriteString(m.renderInputLine("State", m.address.State, m.cursor == 6, w))
+	c.WriteString("\n\n")
+	c.WriteString(m.renderInputLine("Postal", m.address.PostalCode, m.cursor == 7, w))
+	c.WriteString("\n\n")
+	c.WriteString(m.renderInputLine("Country", m.address.Country, m.cursor == 8, w))
 	c.WriteString("\n")
 	content = c.String()
 
@@ -417,10 +433,11 @@ func (m *Model) renderAddress(w int) (header, content, footer string) {
 
 func (m *Model) renderCheckout(w int) (header, content, footer string) {
 	// HEADER
+	cfg := config.GetConfig()
 	var h strings.Builder
 	h.WriteString(m.divider(w))
 	h.WriteString("\n")
-	h.WriteString(m.headerRow("← Back", "CONFIRM ORDER", w))
+	h.WriteString(m.headerRow("← Back", cfg.ShopName, w))
 	h.WriteString("\n")
 	h.WriteString(m.divider(w))
 	h.WriteString("\n\n")
@@ -442,9 +459,17 @@ func (m *Model) renderCheckout(w int) (header, content, footer string) {
 
 	c.WriteString(SubtitleStyle.Render("SHIPPING TO"))
 	c.WriteString("\n\n")
+	c.WriteString(fmt.Sprintf("Name:    %s\n", m.address.FullName))
 	c.WriteString(fmt.Sprintf("Phone:   %s\n", m.address.Phone))
 	c.WriteString(fmt.Sprintf("Email:   %s\n", m.address.Email))
-	c.WriteString(fmt.Sprintf("Address: %s\n", m.address.Address))
+	c.WriteString(fmt.Sprintf("Address: %s\n", m.address.AddressLine1))
+	if strings.TrimSpace(m.address.AddressLine2) != "" {
+		c.WriteString(fmt.Sprintf("         %s\n", m.address.AddressLine2))
+	}
+	c.WriteString(fmt.Sprintf("City:    %s\n", m.address.City))
+	c.WriteString(fmt.Sprintf("State:   %s\n", m.address.State))
+	c.WriteString(fmt.Sprintf("Postal:  %s\n", m.address.PostalCode))
+	c.WriteString(fmt.Sprintf("Country: %s\n", m.address.Country))
 	c.WriteString("\n")
 	c.WriteString(SuccessStyle.Render("Press Enter or Y to place order"))
 	c.WriteString("\n")

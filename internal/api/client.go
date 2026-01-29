@@ -6,12 +6,26 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"time"
 	"terminal-echoware/pkg/types"
 )
 
 type Client struct {
 	BaseURL    string
 	HTTPClient *http.Client
+}
+
+const orderLogPath = "/tmp/terminal-echoware-order.log"
+
+func appendOrderLog(entry string) {
+	f, err := os.OpenFile(orderLogPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	timestamp := time.Now().Format(time.RFC3339)
+	_, _ = f.WriteString(fmt.Sprintf("[%s] %s\n", timestamp, entry))
 }
 
 func NewClient(baseURL string) *Client {
@@ -45,12 +59,17 @@ func (c *Client) CallAPI(req types.APIRequest) (*types.APIResponse, error) {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
+	if resp.StatusCode >= 400 {
+		appendOrderLog(fmt.Sprintf("http %d response body: %s", resp.StatusCode, string(body)))
+	}
+
 	var apiResp types.APIResponse
 	if err := json.Unmarshal(body, &apiResp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
 
 	if apiResp.Error != "" {
+		appendOrderLog("api error response: " + string(body))
 		return nil, fmt.Errorf("api error: %s", apiResp.Error)
 	}
 
@@ -182,9 +201,18 @@ func (c *Client) CreateOrder(params types.OrderCreateParams) (*types.Order, erro
 		Params:    params,
 	}
 
+	if payload, err := json.Marshal(params); err == nil {
+		appendOrderLog("order.create request: " + string(payload))
+	}
+
 	resp, err := c.CallAPI(req)
 	if err != nil {
+		appendOrderLog("order.create error: " + err.Error())
 		return nil, err
+	}
+
+	if payload, err := json.Marshal(resp.Data); err == nil {
+		appendOrderLog("order.create response: " + string(payload))
 	}
 
 	orderJSON, _ := json.Marshal(resp.Data)
