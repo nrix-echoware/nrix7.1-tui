@@ -37,7 +37,7 @@ var GlobalConfig *AppConfig
 
 func InitConfig() {
 	GlobalConfig = &AppConfig{
-		APIBaseURL:         "https://lowkey-backend-omega.vercel.app/",
+		APIBaseURL:         "",
 		SSHPort:            "2222",
 		ShowControls:       true,
 		ShopName:           "Nrix7 Shop",
