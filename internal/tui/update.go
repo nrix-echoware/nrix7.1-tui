@@ -13,10 +13,19 @@ func (m *Model) Init() tea.Cmd {
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+	var cmds []tea.Cmd
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		if !m.viewportReady {
+			m.InitViewport()
+		} else {
+			m.viewport.Width = msg.Width
+			m.viewport.Height = msg.Height
+		}
 		return m, nil
 
 	case tickMsg:
@@ -37,6 +46,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
+		
+		// Handle scroll keys for viewport
+		switch msg.String() {
+		case "pgup":
+			m.viewport.HalfViewUp()
+		case "pgdown":
+			m.viewport.HalfViewDown()
+		case "home":
+			m.viewport.GotoTop()
+		case "end":
+			m.viewport.GotoBottom()
+		}
+		
 		return m.handleKeyPress(msg)
 
 	case productsLoadedMsg:
@@ -52,7 +74,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleOrderCreated(msg)
 	}
 
-	return m, nil
+	// Update viewport
+	m.viewport, cmd = m.viewport.Update(msg)
+	cmds = append(cmds, cmd)
+
+	return m, tea.Batch(cmds...)
 }
 
 func (m *Model) handleProductsLoaded(msg productsLoadedMsg) (tea.Model, tea.Cmd) {
@@ -63,7 +89,7 @@ func (m *Model) handleProductsLoaded(msg productsLoadedMsg) (tea.Model, tea.Cmd)
 	}
 	m.homeProducts = msg.products
 	m.ClearError()
-	return m, nil
+	return m, tea.ClearScreen
 }
 
 func (m *Model) handleProductLoaded(msg productLoadedMsg) (tea.Model, tea.Cmd) {
@@ -77,7 +103,7 @@ func (m *Model) handleProductLoaded(msg productLoadedMsg) (tea.Model, tea.Cmd) {
 	m.InitVariantSelections()
 	m.screen = types.ScreenProduct
 	m.ClearError()
-	return m, nil
+	return m, tea.ClearScreen
 }
 
 func (m *Model) handleSearchResults(msg searchResultsMsg) (tea.Model, tea.Cmd) {
@@ -89,7 +115,7 @@ func (m *Model) handleSearchResults(msg searchResultsMsg) (tea.Model, tea.Cmd) {
 	m.searchResults = msg.products
 	m.ResetCursor()
 	m.ClearError()
-	return m, nil
+	return m, tea.ClearScreen
 }
 
 func (m *Model) handleOrderCreated(msg orderCreatedMsg) (tea.Model, tea.Cmd) {
@@ -101,7 +127,7 @@ func (m *Model) handleOrderCreated(msg orderCreatedMsg) (tea.Model, tea.Cmd) {
 	m.order = msg.order
 	m.screen = types.ScreenOrderSuccess
 	m.ClearError()
-	return m, nil
+	return m, tea.ClearScreen
 }
 
 func (m *Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -141,13 +167,12 @@ func (m *Model) handleHomeKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "s", "/":
-		m.GoToScreen(types.ScreenSearch)
+		cmd := m.GoToScreen(types.ScreenSearch)
 		m.searchQuery = ""
 		m.searchResults = nil
-		return m, nil
+		return m, cmd
 	case "c":
-		m.GoToScreen(types.ScreenCart)
-		return m, nil
+		return m, m.GoToScreen(types.ScreenCart)
 	}
 	return m, nil
 }
@@ -158,9 +183,9 @@ func (m *Model) handleSearchKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Handle special keys first
 	switch key {
 	case "esc":
-		m.GoToScreen(types.ScreenHome)
+		cmd := m.GoToScreen(types.ScreenHome)
 		m.searchResults = nil
-		return m, nil
+		return m, cmd
 	case "ctrl+c":
 		return m, tea.Quit
 	case "backspace":
@@ -216,7 +241,7 @@ func (m *Model) handleProductKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.currentProduct = nil
 		m.ResetProductState()
 		m.ResetCursor()
-		return m, nil
+		return m, tea.ClearScreen
 	case "a":
 		return m.addToCart()
 	case "enter":
@@ -234,8 +259,7 @@ func (m *Model) handleProductKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.CycleVariantRight()
 		return m, nil
 	case "c":
-		m.GoToScreen(types.ScreenCart)
-		return m, nil
+		return m, m.GoToScreen(types.ScreenCart)
 	}
 	return m, nil
 }
@@ -261,8 +285,7 @@ func (m *Model) handleCartKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "q":
 		return m, tea.Quit
 	case "esc", "b":
-		m.GoToScreen(types.ScreenHome)
-		return m, nil
+		return m, m.GoToScreen(types.ScreenHome)
 	case "up", "k":
 		m.NavigateUp()
 		return m, nil
@@ -299,7 +322,7 @@ func (m *Model) handleCartKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "enter", " ":
 		if len(m.cart.Items) > 0 {
-			m.GoToScreen(types.ScreenAddress)
+			return m, m.GoToScreen(types.ScreenAddress)
 		}
 		return m, nil
 	}
@@ -310,10 +333,11 @@ func (m *Model) handleAddressKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.screen = types.ScreenCart
-		return m, nil
+		return m, tea.ClearScreen
 	case "enter":
 		if m.address.Phone != "" && m.address.Email != "" && m.address.Address != "" {
 			m.screen = types.ScreenCheckout
+			return m, tea.ClearScreen
 		}
 		return m, nil
 	case "tab", "down":
@@ -365,12 +389,12 @@ func (m *Model) handleCheckoutKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc", "b":
 		m.screen = types.ScreenAddress
-		return m, nil
+		return m, tea.ClearScreen
 	case "enter", "y":
 		return m.placeOrder()
 	case "n":
 		m.screen = types.ScreenAddress
-		return m, nil
+		return m, tea.ClearScreen
 	}
 	return m, nil
 }
@@ -398,11 +422,11 @@ func (m *Model) placeOrder() (tea.Model, tea.Cmd) {
 func (m *Model) handleOrderSuccessKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter", "esc", " ":
-		m.GoToScreen(types.ScreenHome)
+		cmd := m.GoToScreen(types.ScreenHome)
 		m.ClearCart()
 		m.order = nil
 		m.address = types.ShippingDetails{}
-		return m, nil
+		return m, cmd
 	}
 	return m, nil
 }

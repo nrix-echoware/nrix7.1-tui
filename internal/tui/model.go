@@ -6,6 +6,7 @@ import (
 	"terminal-echoware/pkg/config"
 	"terminal-echoware/pkg/types"
 
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -46,6 +47,8 @@ type Model struct {
 	width             int
 	height            int
 	notification      *Notification
+	viewport          viewport.Model
+	viewportReady     bool
 }
 
 func NewModel(apiClient *api.Client) *Model {
@@ -60,6 +63,7 @@ func NewModel(apiClient *api.Client) *Model {
 		variantFocusIndex: 0,
 		width:             80,
 		height:            24,
+		viewportReady:     false,
 	}
 }
 
@@ -114,10 +118,12 @@ func (m *Model) NavigateDown(maxIndex int) {
 	}
 }
 
-func (m *Model) GoToScreen(screen types.Screen) {
+func (m *Model) GoToScreen(screen types.Screen) tea.Cmd {
 	m.previousScreen = m.screen
 	m.screen = screen
 	m.ResetCursor()
+	m.viewport.GotoTop()
+	return tea.ClearScreen
 }
 
 func (m *Model) SetNotification(message, notifType string) tea.Cmd {
@@ -208,7 +214,6 @@ func (m *Model) CycleVariantLeft() {
 		if sel.SelectedIndex > 0 {
 			sel.SelectedIndex--
 		} else {
-			// Wrap to end
 			sel.SelectedIndex = len(variant.VariantValues) - 1
 		}
 	}
@@ -228,7 +233,6 @@ func (m *Model) CycleVariantRight() {
 		if sel.SelectedIndex < len(variant.VariantValues)-1 {
 			sel.SelectedIndex++
 		} else {
-			// Wrap to start
 			sel.SelectedIndex = 0
 		}
 	}
@@ -267,4 +271,24 @@ func (m *Model) GetSelectedVariantString() string {
 		result += name + ": " + value
 	}
 	return result
+}
+
+// ContentWidth returns usable content width
+func (m *Model) ContentWidth() int {
+	w := m.width - 4 // padding
+	if w < 40 {
+		return 40
+	}
+	if w > 120 {
+		return 120
+	}
+	return w
+}
+
+// InitViewport initializes the viewport with current dimensions
+func (m *Model) InitViewport() {
+	m.viewport = viewport.New(m.width, m.height)
+	m.viewport.YPosition = 0
+	m.viewport.SetContent("")
+	m.viewportReady = true
 }

@@ -15,11 +15,13 @@ type ControlsConfig struct {
 }
 
 type AppConfig struct {
-	APIBaseURL    string
-	SSHPort       string
-	ShowControls  bool
-	Controls      ControlsConfig
-	Theme         ThemeConfig
+	APIBaseURL         string
+	SSHPort            string
+	ShowControls       bool
+	CompanyName        string
+	CompanyDescription string
+	Controls           ControlsConfig
+	Theme              ThemeConfig
 }
 
 type ThemeConfig struct {
@@ -34,9 +36,11 @@ var GlobalConfig *AppConfig
 
 func InitConfig() {
 	GlobalConfig = &AppConfig{
-		APIBaseURL:   "https://lowkey-backend-omega.vercel.app/",
-		SSHPort:      "2222",
-		ShowControls: true,
+		APIBaseURL:         "https://lowkey-backend-omega.vercel.app/",
+		SSHPort:            "2222",
+		ShowControls:       true,
+		CompanyName:        "Nrix7 E-Commerce",
+		CompanyDescription: "Welcome to Nrix7 - Your trusted destination for quality products at unbeatable prices. We bring you the latest trends in fashion, electronics, home essentials, and more. Shop with confidence through our secure terminal interface. Fast shipping, easy returns, and 24/7 customer support.",
 		Controls: ControlsConfig{
 			ShowHelp:     true,
 			HelpPosition: "bottom",
