@@ -93,6 +93,68 @@ func (m *Model) View() string {
 		viewportHeight = 5
 	}
 
+	// Special handling for cart screen with sidebar
+	if m.screen == types.ScreenCart {
+		sidebarWidth := 28
+		contentWidth := w - sidebarWidth - 3
+		if contentWidth < 30 {
+			contentWidth = w - 10
+		}
+		
+		// Render sidebar
+		sidebar := m.renderHotkeySidebar(viewportHeight)
+		
+		// Update viewport with main content only
+		if m.viewportReady {
+			m.viewport.Width = contentWidth
+			m.viewport.Height = viewportHeight
+			m.viewport.SetContent(content)
+		}
+		
+		// Build final view with sidebar
+		var b strings.Builder
+		b.WriteString(header)
+		
+		// Combine sidebar and viewport side by side
+		sidebarLines := strings.Split(strings.TrimRight(sidebar, "\n"), "\n")
+		viewportContent := content
+		if m.viewportReady {
+			viewportContent = m.viewport.View()
+		}
+		viewportLines := strings.Split(strings.TrimRight(viewportContent, "\n"), "\n")
+		
+		maxLines := viewportHeight
+		if len(viewportLines) > maxLines {
+			maxLines = len(viewportLines)
+		}
+		
+		for i := 0; i < maxLines; i++ {
+			sidebarLine := ""
+			if i < len(sidebarLines) {
+				sidebarLine = sidebarLines[i]
+			} else {
+				// Pad sidebar line to maintain width
+				sidebarLine = strings.Repeat(" ", sidebarWidth+2)
+			}
+			
+			viewportLine := ""
+			if i < len(viewportLines) {
+				viewportLine = viewportLines[i]
+			}
+			
+			b.WriteString(sidebarLine)
+			b.WriteString(" │ ")
+			b.WriteString(viewportLine)
+			b.WriteString("\n")
+		}
+		
+		b.WriteString(footer)
+		return lipgloss.NewStyle().
+			Width(m.width).
+			Height(m.height).
+			Render(b.String())
+	}
+
 	// Update viewport
 	if m.viewportReady {
 		m.viewport.Width = w
@@ -350,6 +412,51 @@ func (m *Model) renderProduct(w int) (header, content, footer string) {
 
 // ==================== CART ====================
 
+func (m *Model) renderHotkeySidebar(height int) string {
+	sidebarWidth := 28
+	var sb strings.Builder
+	
+	sb.WriteString(SubtitleStyle.Render("KEYBOARD SHORTCUTS"))
+	sb.WriteString("\n")
+	sb.WriteString(m.divider(sidebarWidth - 4))
+	sb.WriteString("\n\n")
+	
+	hotkeys := []struct {
+		key string
+		desc string
+	}{
+		{"↑ / k", "Navigate Up"},
+		{"↓ / j", "Navigate Down"},
+		{"+ / =", "Increase Qty"},
+		{"- / _", "Decrease Qty"},
+		{"D / x", "Remove Item"},
+		{"Enter", "Checkout"},
+		{"Esc / b", "Back"},
+		{"Q", "Quit"},
+	}
+	
+	for _, hk := range hotkeys {
+		keyPart := HelpStyle.Render(fmt.Sprintf("%-12s", hk.key))
+		descPart := NormalStyle.Render(hk.desc)
+		sb.WriteString(fmt.Sprintf("%s %s\n", keyPart, descPart))
+	}
+	
+	// Fill remaining height
+	lines := strings.Count(sb.String(), "\n")
+	remaining := height - lines - 1
+	if remaining > 0 {
+		sb.WriteString(strings.Repeat("\n", remaining))
+	}
+	
+	return lipgloss.NewStyle().
+		Width(sidebarWidth).
+		Height(height).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(ColorMuted).
+		Padding(1, 1).
+		Render(sb.String())
+}
+
 func (m *Model) renderCart(w int) (header, content, footer string) {
 	// HEADER
 	var h strings.Builder
@@ -361,7 +468,12 @@ func (m *Model) renderCart(w int) (header, content, footer string) {
 	h.WriteString("\n\n")
 	header = h.String()
 
-	// CONTENT
+	// CONTENT (main content only, sidebar handled in View)
+	contentWidth := w - 28 - 3 // sidebar width + spacing
+	if contentWidth < 30 {
+		contentWidth = w - 10
+	}
+	
 	var c strings.Builder
 	if len(m.cart.Items) == 0 {
 		c.WriteString("Your cart is empty.\n\n")
@@ -370,11 +482,11 @@ func (m *Model) renderCart(w int) (header, content, footer string) {
 	} else {
 		for i, item := range m.cart.Items {
 			selected := i == m.cursor
-			c.WriteString(m.renderCartLine(item, selected, w))
+			c.WriteString(m.renderCartLine(item, selected, contentWidth))
 			c.WriteString("\n")
 		}
 		c.WriteString("\n")
-		c.WriteString(m.divider(w))
+		c.WriteString(m.divider(contentWidth))
 		c.WriteString("\n")
 		c.WriteString(TitleStyle.Render(fmt.Sprintf("Total: ₹%.0f", m.cart.Total())))
 		c.WriteString("\n")
@@ -382,7 +494,7 @@ func (m *Model) renderCart(w int) (header, content, footer string) {
 	content = c.String()
 
 	// FOOTER
-	footer = m.renderFooter("↑/↓ Navigate   +/- Qty   D Remove   Enter Checkout   Esc Back", w)
+	footer = m.renderFooter("", w)
 	return
 }
 

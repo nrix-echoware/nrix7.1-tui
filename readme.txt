@@ -16,8 +16,8 @@
 
 ### setup server 
 ```bash
-sudo mkdir -p /opt/terminal-shop
-sudo ssh-keygen \
+mkdir -p /opt/terminal-shop
+ssh-keygen \
   -t ed25519 \
   -f .ssh_host_ed25519_key \
   -N ""

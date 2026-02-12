@@ -50,3 +50,7 @@ temp/
 
 docs
 README.md
+
+
+.ssh_host_ed25519_key
+.ssh_host_ed25519_key.pub
