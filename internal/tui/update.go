@@ -292,11 +292,17 @@ func (m *Model) addToCart() (tea.Model, tea.Cmd) {
 	// Check if all variants are selected (for products with variants)
 	if len(m.currentProduct.ProductVariants) > 0 {
 		variantStr := m.GetSelectedVariantString()
-		m.cart.Add(*m.currentProduct, m.productQuantity, m.GetSelectedVariants())
+		err := m.cart.Add(*m.currentProduct, m.productQuantity, m.GetSelectedVariants())
+		if err != nil {
+			return m, m.SetNotification(err.Error(), "error")
+		}
 		return m, m.SetNotification(fmt.Sprintf("Added %d (%s) to cart!", m.productQuantity, variantStr), "success")
 	}
 	
-	m.cart.Add(*m.currentProduct, m.productQuantity, nil)
+	err := m.cart.Add(*m.currentProduct, m.productQuantity, nil)
+	if err != nil {
+		return m, m.SetNotification(err.Error(), "error")
+	}
 	return m, m.SetNotification(fmt.Sprintf("Added %d to cart!", m.productQuantity), "success")
 }
 
@@ -315,10 +321,12 @@ func (m *Model) handleCartKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "+", "=":
 		if m.cursor < len(m.cart.Items) {
 			item := &m.cart.Items[m.cursor]
-			if item.Quantity < 99 {
-				item.Quantity++
-				return m, m.SetNotification("Quantity increased", "info")
+			const maxQuantity = 5
+			if item.Quantity >= maxQuantity {
+				return m, m.SetNotification(fmt.Sprintf("Maximum quantity of %d reached for this item", maxQuantity), "error")
 			}
+			item.Quantity++
+			return m, m.SetNotification("Quantity increased", "info")
 		}
 		return m, nil
 	case "-", "_":

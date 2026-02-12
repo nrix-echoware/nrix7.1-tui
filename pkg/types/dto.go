@@ -1,5 +1,7 @@
 package types
 
+import "fmt"
+
 type Media struct {
 	URL      string `json:"url"`
 	MimeType string `json:"mimetype"`
@@ -253,18 +255,32 @@ func (c *Cart) Count() int {
 	return count
 }
 
-func (c *Cart) Add(product Product, quantity int, variant map[string]string) {
+func (c *Cart) Add(product Product, quantity int, variant map[string]string) error {
+	const maxQuantity = 5
 	for i := range c.Items {
 		if c.Items[i].Product.ID == product.ID && variantsEqual(c.Items[i].Variant, variant) {
-			c.Items[i].Quantity += quantity
-			return
+			newQuantity := c.Items[i].Quantity + quantity
+			if newQuantity > maxQuantity {
+				c.Items[i].Quantity = maxQuantity
+				return fmt.Errorf("maximum quantity of %d reached for this item", maxQuantity)
+			}
+			c.Items[i].Quantity = newQuantity
+			return nil
 		}
+	}
+	originalQuantity := quantity
+	if quantity > maxQuantity {
+		quantity = maxQuantity
 	}
 	c.Items = append(c.Items, CartItem{
 		Product:  product,
 		Quantity: quantity,
 		Variant:  copyVariantMap(variant),
 	})
+	if originalQuantity > maxQuantity {
+		return fmt.Errorf("quantity limited to maximum of %d", maxQuantity)
+	}
+	return nil
 }
 
 func (c *Cart) Remove(productID string, variant map[string]string) {
@@ -276,17 +292,23 @@ func (c *Cart) Remove(productID string, variant map[string]string) {
 	}
 }
 
-func (c *Cart) UpdateQuantity(productID string, variant map[string]string, quantity int) {
+func (c *Cart) UpdateQuantity(productID string, variant map[string]string, quantity int) error {
+	const maxQuantity = 5
 	for i := range c.Items {
 		if c.Items[i].Product.ID == productID && variantsEqual(c.Items[i].Variant, variant) {
 			if quantity <= 0 {
 				c.Remove(productID, variant)
-			} else {
-				c.Items[i].Quantity = quantity
+				return nil
 			}
-			return
+			if quantity > maxQuantity {
+				c.Items[i].Quantity = maxQuantity
+				return fmt.Errorf("maximum quantity of %d reached for this item", maxQuantity)
+			}
+			c.Items[i].Quantity = quantity
+			return nil
 		}
 	}
+	return nil
 }
 
 func variantsEqual(a, b map[string]string) bool {

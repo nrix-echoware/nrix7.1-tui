@@ -155,6 +155,91 @@ func (m *Model) View() string {
 			Render(b.String())
 	}
 
+	// Special handling for product screen with sidebar
+	if m.screen == types.ScreenProduct {
+		sidebarWidth := 28
+		separatorWidth := 3
+		contentWidth := w - sidebarWidth - separatorWidth
+		if contentWidth < 30 {
+			contentWidth = 30
+		}
+		
+		// Render sidebar
+		sidebar := m.renderProductHotkeySidebar(viewportHeight)
+		
+		// Update viewport with main content only
+		if m.viewportReady {
+			m.viewport.Width = contentWidth
+			m.viewport.Height = viewportHeight
+			m.viewport.SetContent(content)
+		}
+		
+		// Get viewport content
+		viewportContent := content
+		if m.viewportReady {
+			viewportContent = m.viewport.View()
+		}
+		
+		// Split into lines and trim
+		sidebarLines := strings.Split(strings.TrimRight(sidebar, "\n"), "\n")
+		viewportLines := strings.Split(strings.TrimRight(viewportContent, "\n"), "\n")
+		
+		// Get actual rendered sidebar width (accounting for ANSI codes)
+		actualSidebarWidth := 0
+		if len(sidebarLines) > 0 {
+			actualSidebarWidth = lipgloss.Width(sidebarLines[0])
+		}
+		
+		// Pad to same height
+		maxLines := viewportHeight
+		if len(viewportLines) > maxLines {
+			maxLines = len(viewportLines)
+		}
+		if len(sidebarLines) < maxLines {
+			emptySidebarLine := strings.Repeat(" ", actualSidebarWidth)
+			for len(sidebarLines) < maxLines {
+				sidebarLines = append(sidebarLines, emptySidebarLine)
+			}
+		}
+		if len(viewportLines) < maxLines {
+			for len(viewportLines) < maxLines {
+				viewportLines = append(viewportLines, "")
+			}
+		}
+		
+		// Combine line by line
+		var combinedLines []string
+		for i := 0; i < maxLines && i < viewportHeight; i++ {
+			sidebarLine := sidebarLines[i]
+			viewportLine := ""
+			if i < len(viewportLines) {
+				viewportLine = viewportLines[i]
+			}
+			// Truncate viewport line if too long
+			if lipgloss.Width(viewportLine) > contentWidth {
+				viewportLine = viewportLine[:contentWidth]
+			}
+			combinedLine := lipgloss.JoinHorizontal(lipgloss.Left, sidebarLine, " │ ", viewportLine)
+			combinedLines = append(combinedLines, combinedLine)
+		}
+		
+		combinedContent := strings.Join(combinedLines, "\n")
+		
+		// Build final view
+		var b strings.Builder
+		b.WriteString(header)
+		b.WriteString(combinedContent)
+		if !strings.HasSuffix(combinedContent, "\n") {
+			b.WriteString("\n")
+		}
+		b.WriteString(footer)
+		
+		return lipgloss.NewStyle().
+			Width(m.width).
+			Height(m.height).
+			Render(b.String())
+	}
+
 	// Update viewport
 	if m.viewportReady {
 		m.viewport.Width = w
@@ -284,6 +369,50 @@ func (m *Model) renderSearch(w int) (header, content, footer string) {
 	return
 }
 
+func (m *Model) renderProductHotkeySidebar(height int) string {
+	sidebarWidth := 28
+	var sb strings.Builder
+	
+	sb.WriteString(SubtitleStyle.Render("KEYBOARD SHORTCUTS"))
+	sb.WriteString("\n")
+	sb.WriteString(m.divider(sidebarWidth - 4))
+	sb.WriteString("\n\n")
+	
+	hotkeys := []struct {
+		key string
+		desc string
+	}{
+		{"Tab", "Next Option"},
+		{"Shift+Tab", "Prev Option"},
+		{"← / →", "Change Value"},
+		{"↑ / ↓", "Scroll"},
+		{"A / Enter", "Add to Cart"},
+		{"C", "View Cart"},
+		{"Esc / B", "Back"},
+		{"Q", "Quit"},
+	}
+	
+	for _, hk := range hotkeys {
+		keyPart := HelpStyle.Render(fmt.Sprintf("%-14s", hk.key))
+		descPart := NormalStyle.Render(hk.desc)
+		sb.WriteString(fmt.Sprintf("%s %s\n", keyPart, descPart))
+	}
+	
+	lines := strings.Count(sb.String(), "\n")
+	remaining := height - lines - 1
+	if remaining > 0 {
+		sb.WriteString(strings.Repeat("\n", remaining))
+	}
+	
+	return lipgloss.NewStyle().
+		Width(sidebarWidth).
+		Height(height).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(ColorMuted).
+		Padding(1, 1).
+		Render(sb.String())
+}
+
 // ==================== PRODUCT ====================
 
 func (m *Model) renderProduct(w int) (header, content, footer string) {
@@ -292,7 +421,7 @@ func (m *Model) renderProduct(w int) (header, content, footer string) {
 	}
 	p := m.currentProduct
 
-	// HEADER (fixed)
+	// HEADER (compact)
 	var h strings.Builder
 	h.WriteString(m.divider(w))
 	h.WriteString("\n")
@@ -303,69 +432,67 @@ func (m *Model) renderProduct(w int) (header, content, footer string) {
 	h.WriteString(m.headerRow("← Back", cartStr, w))
 	h.WriteString("\n")
 	h.WriteString(m.divider(w))
-	h.WriteString("\n\n")
-
-	// Product title + price (in header)
+	h.WriteString("\n")
+	
+	// Compact product title and price in header
 	titleLine := p.Name
 	if p.Brand != "" {
-		titleLine = fmt.Sprintf("(%s) %s", p.Brand, p.Name)
+		titleLine = fmt.Sprintf("%s - %s", p.Brand, p.Name)
 	}
-	h.WriteString(TitleStyle.Render("🛍️  " + titleLine))
-	h.WriteString("\n\n")
-
-	// Price line (single line)
+	h.WriteString(TitleStyle.Render(titleLine))
+	h.WriteString("  ")
+	
 	priceStr := PriceStyle.Render(fmt.Sprintf("₹%.0f", p.SellingPrice))
 	if p.MRPPrice > p.SellingPrice {
 		discount := ((p.MRPPrice - p.SellingPrice) / p.MRPPrice) * 100
-		priceStr += HelpStyle.Render(fmt.Sprintf("  ₹%.0f", p.MRPPrice))
-		priceStr += SuccessStyle.Render(fmt.Sprintf("  %.0f%% OFF", discount))
+		priceStr += " " + HelpStyle.Render(fmt.Sprintf("₹%.0f", p.MRPPrice))
+		priceStr += " " + SuccessStyle.Render(fmt.Sprintf("%.0f%% OFF", discount))
 	}
-	h.WriteString("💰 " + priceStr)
-	h.WriteString("\n\n")
+	h.WriteString(priceStr)
+	h.WriteString("\n")
+	h.WriteString(m.divider(w))
+	h.WriteString("\n")
 	header = h.String()
 
-	// CONTENT (scrollable)
+	// CONTENT (compact, no boxes, minimal spacing)
+	contentWidth := w - 28 - 3 // sidebar width + separator
+	if contentWidth < 30 {
+		contentWidth = 30
+	}
+	
 	var c strings.Builder
-
-	// Description
-	c.WriteString(m.divider(w))
+	
+	// Description (compact)
+	c.WriteString(SubtitleStyle.Render("DESCRIPTION"))
 	c.WriteString("\n")
-	c.WriteString(SubtitleStyle.Render("📝 DESCRIPTION"))
-	c.WriteString("\n")
-	c.WriteString(m.divider(w))
-	c.WriteString("\n\n")
 	if p.ProductDescription != "" {
-		c.WriteString(wrapText(p.ProductDescription, w-2))
+		c.WriteString(wrapText(p.ProductDescription, contentWidth-2))
 	} else {
-		c.WriteString("No description available.")
+		c.WriteString(HelpStyle.Render("No description available."))
 	}
 	c.WriteString("\n\n")
 
-	// Features
+	// Features (compact)
 	if len(p.Features) > 0 {
-		c.WriteString(m.divider(w))
-		c.WriteString("\n")
 		c.WriteString(SubtitleStyle.Render("FEATURES"))
 		c.WriteString("\n")
-		c.WriteString(m.divider(w))
-		c.WriteString("\n\n")
-		for _, f := range p.Features {
-			c.WriteString(fmt.Sprintf("• %s\n", f))
+		for i, f := range p.Features {
+			c.WriteString(fmt.Sprintf("  • %s", f))
+			if i < len(p.Features)-1 {
+				c.WriteString("\n")
+			}
 		}
-		c.WriteString("\n")
+		c.WriteString("\n\n")
 	}
 
-	// Options
-	c.WriteString(m.divider(w))
-	c.WriteString("\n")
+	// Options (compact, no box)
 	c.WriteString(SubtitleStyle.Render("OPTIONS"))
 	c.WriteString("\n")
-	c.WriteString(m.divider(w))
-	c.WriteString("\n\n")
 
 	// Quantity
 	qtyFocused := m.variantFocusIndex == 0
-	c.WriteString(m.renderOptionLine("Quantity", fmt.Sprintf("%d", m.productQuantity), qtyFocused))
+	qtyLine := m.renderOptionLine("Quantity", fmt.Sprintf("%d", m.productQuantity), qtyFocused)
+	c.WriteString(qtyLine)
 	c.WriteString("\n")
 
 	// Variants
@@ -384,29 +511,26 @@ func (m *Model) renderProduct(w int) (header, content, footer string) {
 				opts = append(opts, OptionValueUnselectedStyle.Render(val.Label))
 			}
 		}
-		c.WriteString(m.renderOptionLine(variant.VariantName, strings.Join(opts, " "), focused))
+		variantLine := m.renderOptionLine(variant.VariantName, strings.Join(opts, " "), focused)
+		c.WriteString(variantLine)
 		c.WriteString("\n")
 	}
 	c.WriteString("\n")
 
-	// Tags
+	// Tags (compact)
 	if len(p.Tags) > 0 {
-		c.WriteString(m.divider(w))
+		c.WriteString(SubtitleStyle.Render("TAGS"))
 		c.WriteString("\n")
-		c.WriteString(SubtitleStyle.Render("🏷️ TAGS"))
-		c.WriteString("\n")
-		c.WriteString(m.divider(w))
-		c.WriteString("\n\n")
 		for _, tag := range p.Tags {
-			c.WriteString(HelpStyle.Render(fmt.Sprintf("#%s  ", tag)))
+			c.WriteString(BadgeStyle.Render(" #" + tag + " "))
 		}
-		c.WriteString("\n\n")
+		c.WriteString("\n")
 	}
 
 	content = c.String()
 
-	// FOOTER (fixed)
-	footer = m.renderFooter("↑/↓ Scroll   ←/→ Change   A Add to Cart   C Cart   Esc Back", w)
+	// FOOTER (minimal)
+	footer = m.renderFooter("", w)
 	return
 }
 
@@ -545,47 +669,87 @@ func (m *Model) renderAddress(w int) (header, content, footer string) {
 
 func (m *Model) renderCheckout(w int) (header, content, footer string) {
 	// HEADER
-	cfg := config.GetConfig()
 	var h strings.Builder
 	h.WriteString(m.divider(w))
 	h.WriteString("\n")
-	h.WriteString(m.headerRow("← Back", cfg.ShopName, w))
+	h.WriteString(m.headerRow("← Back", "CHECKOUT", w))
 	h.WriteString("\n")
 	h.WriteString(m.divider(w))
-	h.WriteString("\n\n")
+	h.WriteString("\n")
 	header = h.String()
 
-	// CONTENT
-	var c strings.Builder
-	c.WriteString(SubtitleStyle.Render("ORDER SUMMARY"))
-	c.WriteString("\n\n")
-	for _, item := range m.cart.Items {
+	// Two-partition layout: Order Summary (left) | Shipping Address (right)
+	leftWidth := (w - 3) / 2
+	rightWidth := w - leftWidth - 3
+	
+	// LEFT: Order Summary (boxed)
+	var leftBox strings.Builder
+	leftBox.WriteString(SubtitleStyle.Render("ORDER SUMMARY"))
+	leftBox.WriteString("\n")
+	
+	// Items list
+	maxItems := 10
+	itemsToShow := m.cart.Items
+	if len(itemsToShow) > maxItems {
+		itemsToShow = itemsToShow[:maxItems]
+	}
+	
+	for i, item := range itemsToShow {
 		total := item.Product.SellingPrice * float64(item.Quantity)
-		c.WriteString(fmt.Sprintf("%-40s x%d    ₹%.0f\n", truncate(item.Product.Name, 40), item.Quantity, total))
+		name := truncate(item.Product.Name, leftWidth-20)
+		leftBox.WriteString(fmt.Sprintf("  %d. %s\n", i+1, name))
+		leftBox.WriteString(fmt.Sprintf("     Qty: %d  %s\n", item.Quantity, PriceStyle.Render(fmt.Sprintf("₹%.0f", total))))
+		if i < len(itemsToShow)-1 {
+			leftBox.WriteString("\n")
+		}
 	}
-	c.WriteString("\n")
-	c.WriteString(m.divider(w))
-	c.WriteString("\n")
-	c.WriteString(TitleStyle.Render(fmt.Sprintf("Total: ₹%.0f", m.cart.Total())))
-	c.WriteString("\n\n")
-
-	c.WriteString(SubtitleStyle.Render("SHIPPING TO"))
-	c.WriteString("\n\n")
-	c.WriteString(fmt.Sprintf("Name:    %s\n", m.address.FullName))
-	c.WriteString(fmt.Sprintf("Phone:   %s\n", m.address.Phone))
-	c.WriteString(fmt.Sprintf("Email:   %s\n", m.address.Email))
-	c.WriteString(fmt.Sprintf("Address: %s\n", m.address.AddressLine1))
+	
+	if len(m.cart.Items) > maxItems {
+		leftBox.WriteString(fmt.Sprintf("\n  ... and %d more item(s)\n", len(m.cart.Items)-maxItems))
+	}
+	
+	leftBox.WriteString("\n")
+	leftBox.WriteString(m.divider(leftWidth - 4))
+	leftBox.WriteString("\n")
+	totalLine := fmt.Sprintf("  Total: %s", PriceStyle.Render(fmt.Sprintf("₹%.0f", m.cart.Total())))
+	leftBox.WriteString(TitleStyle.Render(totalLine))
+	
+	leftBoxRendered := BoxStyle.
+		Width(leftWidth - 2).
+		BorderForeground(ColorPrimary).
+		Render(leftBox.String())
+	
+	// RIGHT: Shipping Address (boxed)
+	var rightBox strings.Builder
+	rightBox.WriteString(SubtitleStyle.Render("SHIPPING ADDRESS"))
+	rightBox.WriteString("\n\n")
+	
+	rightBox.WriteString(fmt.Sprintf("  %s: %s\n", HelpStyle.Render("Name"), NormalStyle.Render(m.address.FullName)))
+	rightBox.WriteString(fmt.Sprintf("  %s: %s\n", HelpStyle.Render("Phone"), NormalStyle.Render(m.address.Phone)))
+	rightBox.WriteString(fmt.Sprintf("  %s: %s\n", HelpStyle.Render("Email"), NormalStyle.Render(m.address.Email)))
+	rightBox.WriteString("\n")
+	rightBox.WriteString(fmt.Sprintf("  %s:\n", HelpStyle.Render("Address")))
+	rightBox.WriteString(fmt.Sprintf("    %s\n", NormalStyle.Render(m.address.AddressLine1)))
 	if strings.TrimSpace(m.address.AddressLine2) != "" {
-		c.WriteString(fmt.Sprintf("         %s\n", m.address.AddressLine2))
+		rightBox.WriteString(fmt.Sprintf("    %s\n", NormalStyle.Render(m.address.AddressLine2)))
 	}
-	c.WriteString(fmt.Sprintf("City:    %s\n", m.address.City))
-	c.WriteString(fmt.Sprintf("State:   %s\n", m.address.State))
-	c.WriteString(fmt.Sprintf("Postal:  %s\n", m.address.PostalCode))
-	c.WriteString(fmt.Sprintf("Country: %s\n", m.address.Country))
-	c.WriteString("\n")
-	c.WriteString(SuccessStyle.Render("Press Enter or Y to place order"))
-	c.WriteString("\n")
-	content = c.String()
+	rightBox.WriteString(fmt.Sprintf("    %s, %s %s\n", 
+		NormalStyle.Render(m.address.City),
+		NormalStyle.Render(m.address.State),
+		NormalStyle.Render(m.address.PostalCode)))
+	rightBox.WriteString(fmt.Sprintf("    %s\n", NormalStyle.Render(m.address.Country)))
+	rightBox.WriteString("\n")
+	rightBox.WriteString(SuccessStyle.Render("  Enter/Y to confirm"))
+	
+	rightBoxRendered := BoxStyle.
+		Width(rightWidth - 2).
+		BorderForeground(ColorSecondary).
+		Render(rightBox.String())
+	
+	// Combine left and right using lipgloss
+	combinedContent := lipgloss.JoinHorizontal(lipgloss.Top, leftBoxRendered, " │ ", rightBoxRendered)
+	
+	content = combinedContent + "\n"
 
 	// FOOTER
 	footer = m.renderFooter("Enter/Y Confirm   N/Esc Back", w)
@@ -596,24 +760,58 @@ func (m *Model) renderCheckout(w int) (header, content, footer string) {
 
 func (m *Model) renderOrderSuccess(w int) (header, content, footer string) {
 	// HEADER
+	cfg := config.GetConfig()
 	var h strings.Builder
 	h.WriteString(m.divider(w))
 	h.WriteString("\n")
-	h.WriteString(lipgloss.NewStyle().Width(w).Align(lipgloss.Center).Render(SuccessStyle.Render("ORDER PLACED!")))
+	h.WriteString(m.headerRow("", cfg.ShopName, w))
 	h.WriteString("\n")
 	h.WriteString(m.divider(w))
-	h.WriteString("\n\n")
+	h.WriteString("\n")
 	header = h.String()
 
 	// CONTENT
 	var c strings.Builder
-	if m.order != nil {
-		c.WriteString(fmt.Sprintf("Order ID: %s\n", m.order.ID))
-		c.WriteString(fmt.Sprintf("Total:    ₹%.0f\n", m.order.TotalAmount))
-		c.WriteString(fmt.Sprintf("Status:   %s\n", m.order.Status.Type))
-	}
+	
+	// Success message
 	c.WriteString("\n")
-	c.WriteString(SuccessStyle.Render("Thank you for your order!"))
+	successMsg := lipgloss.NewStyle().
+		Width(w).
+		Align(lipgloss.Center).
+		Foreground(ColorAccent).
+		Bold(true).
+		Render("✓ ORDER PLACED SUCCESSFULLY!")
+	c.WriteString(successMsg)
+	c.WriteString("\n\n")
+	
+	// Order details box
+	if m.order != nil {
+		var orderBox strings.Builder
+		orderBox.WriteString(SubtitleStyle.Render("ORDER DETAILS"))
+		orderBox.WriteString("\n")
+		orderBox.WriteString(m.divider(w - 4))
+		orderBox.WriteString("\n")
+		orderBox.WriteString(fmt.Sprintf("  %s: %s\n", HelpStyle.Render("Order ID"), TitleStyle.Render(m.order.ID)))
+		orderBox.WriteString(fmt.Sprintf("  %s: %s\n", HelpStyle.Render("Total"), PriceStyle.Render(fmt.Sprintf("₹%.0f", m.order.TotalAmount))))
+		orderBox.WriteString(fmt.Sprintf("  %s: %s\n", HelpStyle.Render("Status"), SuccessStyle.Render(string(m.order.Status.Type))))
+		orderBox.WriteString(m.divider(w - 4))
+		
+		boxContent := orderBox.String()
+		orderBoxRendered := BoxStyle.
+			Width(w - 4).
+			BorderForeground(ColorAccent).
+			Render(boxContent)
+		c.WriteString(orderBoxRendered)
+		c.WriteString("\n\n")
+	}
+	
+	// Thank you message
+	thankYouMsg := lipgloss.NewStyle().
+		Width(w).
+		Align(lipgloss.Center).
+		Foreground(ColorSecondary).
+		Render("Thank you for your order!")
+	c.WriteString(thankYouMsg)
 	c.WriteString("\n")
 	content = c.String()
 
